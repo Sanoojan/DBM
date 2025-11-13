@@ -93,9 +93,7 @@ def parse_args(mode):
     train_parser.add_argument(
         "--val_test_metrics",
         nargs="+",
-        default=[
-            "loss",
-        ],
+        default=[],
         help="Limit the validation metrics used to select test results to only a subset (if empty, include all)",
     )
     train_parser.add_argument(
