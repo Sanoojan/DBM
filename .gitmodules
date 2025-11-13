@@ -1,0 +1,6 @@
+[submodule "submodules/EyeTrackingMetrics"]
+	path = submodules/EyeTrackingMetrics
+	url = https://github.com/Husseinjd/EyeTrackingMetrics
+[submodule "submodules/PyGazeAnalyser"]
+	path = submodules/PyGazeAnalyser
+	url = https://github.com/esdalmaijer/PyGazeAnalyser

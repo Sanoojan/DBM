@@ -1,0 +1,39 @@
+__pycache__
+.ipynb_checkpoints
+*.egg-info/
+*~
+*.pyc
+.idea/
+.style.cfg
+*.onnx
+*_out.txt
+*.mp4
+*.log
+*.pyi
+
+slurm_tmp/
+slurm_jobs/
+slurm_output/
+
+# File lists
+intent.public_repo_filelist.txt
+intent.sg_filelist.txt
+
+.DS_Store
+
+.vscode/*
+
+# Profiler output
+*.prof
+
+# Weights and Biases Logging / Checkpoint Storage
+wandb/
+checkpoints/
+
+# PyTorch Lightning logs
+lightning_logs/
+
+# Test Coverage
+.coverage*
+
+tmp/

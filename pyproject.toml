@@ -1,0 +1,22 @@
+[build-system]
+requires = [
+  "setuptools",
+]
+build-backend = "setuptools.build_meta"
+
+[tool.flake8]
+exclude = '''
+'''
+max-line-length = 120
+
+[tool.isort]
+known_third_party = ["wandb"]
+line_length = 99
+profile = "black"
+
+[tool.black]
+line-length = 120
+target-version = ["py311"]
+extend-exclude = '''
+()
+'''

@@ -1,0 +1,65 @@
+# Download options for public data
+# Please only download larger modalities as needed (check the sample first)
+s3_bucket_name: "hid-cfm-public-data"
+s3_project_folder: "IDD/Processed"
+
+# The entire publicly released dataset - does not contain participant-facing webcam or audio recordings - 723.5 GB
+all: {}
+
+# Contains the dataset, excluding depth, semantic segmentation, and 1/4 RBG videos (contains full resolution RGB) - 137.1 GB
+only-rgb-video:
+  include_patterns:
+    - "LICENSE.txt"
+    - "idd_annotation.csv"
+    - "Resampled_previous_10/*"
+    - "Resampled_previous_60/**/experiment_tobii_frame.csv"
+    - "Resampled_previous_10_derived/*"
+    - "Resampled_previous_60_derived/*"
+  exclude_patterns:
+    - "*/cam_depth/*"
+    - "*/cam_seg/*"
+    - "*/cam_front_scale4/*"
+
+# Contains the dataset, excluding all original videos, but including a 1/4 scaled down RGB video - 28.7 GB
+only-scaled-rgb-video:
+  include_patterns:
+    - "LICENSE.txt"
+    - "idd_annotation.csv"
+    - "Resampled_previous_10/*"
+    - "Resampled_previous_60/**/experiment_tobii_frame.csv"
+    - "Resampled_previous_10_derived/*"
+    - "Resampled_previous_60_derived/*"
+  exclude_patterns:
+    - "*/cam_depth/*"
+    - "*/cam_seg/*"
+    - "*/cam_front/*"
+
+# Contains the dataset, excluding all video - 21.4 GB
+no-video:
+  include_patterns:
+    - "LICENSE.txt"
+    - "idd_annotation.csv"
+    - "Resampled_previous_10/*"
+    - "Resampled_previous_60/**/experiment_tobii_frame.csv"
+    - "Resampled_previous_10_derived/*"
+    - "Resampled_previous_60_derived/*"
+  exclude_patterns:
+    - "*/cam_*/*"
+
+# Only contains the original raw dataset without derived features, excluding all video - 11.7 GB
+no-video-only-raw:
+  include_patterns:
+    - "LICENSE.txt"
+    - "idd_annotation.csv"
+    - "Resampled_previous_10/*"
+    - "Resampled_previous_60/**/experiment_tobii_frame.csv"
+  exclude_patterns:
+    - "*.mkv"
+    - "*.avi"
+
+# Contains a single route driven by subject P710 - 1.3 GB
+sample:
+  include_patterns:
+    - "LICENSE.txt"
+    - "idd_annotation.csv"
+    - "*/Participants/P710/R1/driving/6e-vehicle_run_red_light/*"

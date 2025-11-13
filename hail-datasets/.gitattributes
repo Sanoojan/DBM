@@ -1,0 +1,8 @@
+*pkl filter=lfs diff=lfs merge=lfs -text
+*tfrecord filter=lfs diff=lfs merge=lfs -text
+*.ipynb	diff=jupyternotebook
+*.ipynb	merge=jupyternotebook
+vocabulary.csv filter=lfs diff=lfs merge=lfs -text
+tests/youtube/data/train/motorsport/*.srt filter=lfs diff=lfs merge=lfs -text
+tests/youtube/data/srt_cache/train/*.pkl filter=lfs diff=lfs merge=lfs -text
+tests/youtube/data/srt_cache/train/*.parquet filter=lfs diff=lfs merge=lfs -text
