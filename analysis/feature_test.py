@@ -219,7 +219,7 @@ def stat_test(baseline_df, condition_df, condition, out_dir):
         results[test_column] = {
             "mean_diff": mean_diff,
             "pvalue": pvalue,
-            "effect": np.abs(sig_test.statistic) / np.sqrt(baseline_data.shape[0]),
+            "effect": np.abs(sig_test.zstatistic) / np.sqrt(baseline_data.shape[0]),
         }
 
         # Plot distribution of differences

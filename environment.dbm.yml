@@ -25,7 +25,7 @@ dependencies:
   - pre-commit
   - python=3.11
   - scikit-learn
-  - scipy
+  - scipy=1.14.1
   - simplejson
   - tqdm
   - invoke
