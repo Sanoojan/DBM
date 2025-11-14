@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import os
 import pickle
 
@@ -139,28 +140,31 @@ def load_checkpoints(paths, pretty_name):
 
 
 def main():
-    load_checkpoints("../checkpoints/rf", "Random Forest")
-    load_checkpoints("../checkpoints/gbm", "Grad. Boosting")
-    load_checkpoints("../checkpoints/svm", "SVM")
-    load_checkpoints(["../checkpoints/linreg"], "Logistic Reg.")
+    # Set up the arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument("checkpoints", help="Checkpoint directory path")
+    args = parser.parse_args()
+    checkpoints_dir = os.path.expanduser(args.checkpoints)
+
+    print("The results of our machine learning baselines")
+    load_checkpoints(os.path.join(checkpoints_dir, "rf"), "Random Forest")
+    load_checkpoints(os.path.join(checkpoints_dir, "gbm"), "Grad. Boosting")
+    load_checkpoints(os.path.join(checkpoints_dir, "svm"), "SVM")
+    load_checkpoints([os.path.join(checkpoints_dir, "linreg")], "Logistic Reg.")
     load_checkpoints(
         [
-            "../checkpoints/shallow_cd",
-            "../checkpoints/shallow_intox",
-            "../checkpoints/shallow_impaired",
-            "../checkpoints/shallow_impaired_intox",
+            os.path.join(checkpoints_dir, "shallow_cd"),
+            os.path.join(checkpoints_dir, "shallow_intox"),
+            os.path.join(checkpoints_dir, "shallow_impaired"),
+            os.path.join(checkpoints_dir, "shallow_impaired_intox"),
         ],
         "Single-task MLP",
     )
-    outputs = load_checkpoints("../checkpoints/shallow", "Multi-task MLP")
+    outputs = load_checkpoints(os.path.join(checkpoints_dir, "shallow"), "Multi-task MLP")
 
     print()
+    print("Confusion matrix for the multi-task MLP")
     cm = outputs["cm3_impaired_first_mean"]
-    for row in range(3):
-        print(",".join([f"{x:0.2f}" for x in cm[row]]))
-
-    print()
-    cm = outputs["cm3_intox_cd_mean"]
     for row in range(3):
         print(",".join([f"{x:0.2f}" for x in cm[row]]))
 
