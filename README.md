@@ -47,3 +47,12 @@ Alternatively, you can use the "run_experiments.py" script to run a set of exper
 ```
 
 Note that the "--num_repeats" argument defined in "exp/example.txt" will determine the total repeats of each line of the experiment, iterating through the test_split_index and random_seed used for each.
+
+
+
+# ITSC 2025 Paper Replication
+```
+./analysis/feature_test.py
+./run_experiments.py -e exp/example.txt --experiments_per_gpu 1 --num_gpu 1
+./analysis/itsc25.py checkpoints
+```
