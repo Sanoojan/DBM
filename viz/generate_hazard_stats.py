@@ -40,6 +40,7 @@ def main():
 
     config.scenario_name_filter = "driving/[0-9].*"
     config.remove_participants = ["P701", "P711", "7218", "7219", "7225", "7228", "7229", "7237"]
+    config.scenario_remove_anomalies = False
 
     # Use 60 second chunks, offset 30 seconds from the end to exclude hazard
     config.chunk_strategy = "full"
