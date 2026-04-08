@@ -5,7 +5,7 @@ The DBM_Dataset class within dbm_dataset.py inherits the DDD_2024_Dataset from h
 from data.dbm_dataset import DBM_Dataset, DBM_Dataset_Config
 
 config = DBM_Dataset_Config()
-config.base_path = "~/data/IDD/Processed"
+config.base_path = "dataset/Vehicle/No-Video"
 config.index_relative_path = "Resampled_previous_10"
 
 config.features = {
@@ -34,7 +34,7 @@ The remainder of this document describes each of the parameters and the expected
 
 # Dataset paths and filtering scenarios
 
-## base_path - string - defaults to "~/data/IDD/Processed/"
+## base_path - string - defaults to "dataset/Vehicle/No-Video/"
 Used to specify the base path used by all other dataset paths. This is prepended to all other paths, so leave blank if some paths do not share a common root. This dataset allows loading of multiple directories with different frame rates and feature subsets.
 
 ## index_relative_path - string - defaults to "Resampled_previous_10"

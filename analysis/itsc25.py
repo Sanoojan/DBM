@@ -95,6 +95,7 @@ def load_checkpoints(paths, pretty_name):
                 fold_prob.append(np.concat(task_prob, axis=0))
 
             # Create final fold arrays
+            
             fold_gt = np.concat(fold_gt, axis=-1)
             fold_prob = np.concat(fold_prob, axis=-1)
 

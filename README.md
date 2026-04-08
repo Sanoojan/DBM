@@ -17,7 +17,7 @@ micromamba activate dbm
 In order to download a sample of IDD, which is the main dataset used by this pipeline, run the following:
 
 ```
-./data/download_processed_dataset.py --output_dir ~/data/IDD/Processed --version sample
+./data/download_processed_dataset.py --output_dir dataset/Vehicle/No-Video --version sample
 ```
 
 You can verify this data and then download a larger part of the dataset, or the whole dataset, by changing the version parameter. For more information on versions, look in "data/configs/public-dataset.yaml". To replicate the results from the IDD paper, you will at least need version "no-video", which is 16.6 GB large.

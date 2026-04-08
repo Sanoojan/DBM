@@ -168,3 +168,10 @@ cython_debug/
 
 wandb/
 checkpoints/
+**/*.pth
+two_stream_models/*
+flow_models/*
+flow_only_models_opt/*
+flow_only_models/*
+flow_models2/*
+dataset/*

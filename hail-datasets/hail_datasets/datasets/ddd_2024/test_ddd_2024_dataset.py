@@ -10,7 +10,7 @@ from ddd_2024_dataset import DDD2024Dataset, DDD2024DatasetConfig
 
 def main():
     config = DDD2024DatasetConfig()
-    config.base_path = "~/data/IDD/Processed/"
+    config.base_path = "dataset/Vehicle/No-Video/"
     config.index_relative_path = "Resampled_previous_10" 
     
     config.features = {

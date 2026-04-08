@@ -17,7 +17,7 @@ def main():
     parser.add_argument(
         "--in_dir",
         type=str,
-        default="~/data/IDD/Processed",
+        default="dataset/Vehicle/No-Video",
         help="path to the top-level of the input resampled data directory",
     )
     args = parser.parse_args()

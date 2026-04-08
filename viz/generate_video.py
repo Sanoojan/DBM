@@ -119,7 +119,7 @@ def main():
     # Load the hazard dataset
     config = DBM_Dataset_Config()
 
-    config.base_path = "~/data/IDD/Processed/"
+    config.base_path = "dataset/Vehicle/No-Video/"
     config.index_relative_path = "Resampled_previous_10"
 
     config.features = {

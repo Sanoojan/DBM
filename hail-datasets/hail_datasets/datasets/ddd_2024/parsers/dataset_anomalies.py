@@ -40,7 +40,7 @@ class DatasetAnomalies:
 
 
 def main():
-    crash_stats = DatasetAnomalies("~/data/IDD/Processed")
+    crash_stats = DatasetAnomalies("dataset/Vehicle/No-Video")
     print(crash_stats.get_anomalies("7207", "2"))
 
 

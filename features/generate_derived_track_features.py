@@ -26,13 +26,13 @@ def main():
     parser.add_argument(
         "--in_dir",
         type=str,
-        default="~/data/IDD/Processed",
+        default="dataset/Vehicle/No-Video",
         help="path to the top-level of the input resampled data directory",
     )
     parser.add_argument(
         "--out_dir",
         type=str,
-        default="~/data/IDD/Processed/Resampled_previous_10_derived",
+        default="dataset/Vehicle/No-Video/Resampled_previous_10_derived",
         help="path to the top-level of the output derived data directory",
     )
     parser.add_argument(

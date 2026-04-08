@@ -142,7 +142,7 @@ def create_dataloader(args, fold_name="train", include_objects=False, train_data
     """
     config = DBM_Dataset_Config()
 
-    config.base_path = os.path.expanduser(os.path.expandvars("~/data/IDD/Processed/"))
+    config.base_path = os.path.expanduser(os.path.expandvars("dataset/Vehicle/No-Video/"))
     config.index_relative_path = "Resampled_previous_10"
 
     aggregate_model = args.model in [

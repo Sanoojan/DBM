@@ -59,7 +59,7 @@ class CrashStats:
 
 
 def main():
-    crash_stats = CrashStats("~/data/IDD/Processed")
+    crash_stats = CrashStats("dataset/Vehicle/No-Video")
     print(crash_stats.get_number_crashes("7207", "3c"))
 
 

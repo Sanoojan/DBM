@@ -56,7 +56,7 @@ class FoldConfig():
 
 class DDD2024DatasetConfig():
     def __init__(self):
-        self.base_path = "~/data/IDD/Processed/"  # The base path used by all other dataset paths - leave blank if no shared root
+        self.base_path = "dataset/Vehicle/No-Video/"  # The base path used by all other dataset paths - leave blank if no shared root
         self.index_relative_path = "Resampled_previous_10"  # The relative path to use for indexing the dataset and getting scenario and participant metadata
         self.folds_path = os.path.join(os.path.dirname(__file__), "folds.csv")  # The path to the csv file containing the folds when using the "fixed" fold_name setting
         
