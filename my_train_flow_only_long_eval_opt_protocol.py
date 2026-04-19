@@ -18,15 +18,15 @@ WANDB_PROJECT = "DBM-OFlow"  # set to None to disable
 EXCLUDE_PARTICIPANTS = {"P701", "P711", "7218", "7219", "7225", "7228", "7229", "7237"}
 SCENARIO_NAMES       = ["1a", "2", "2b", "3c", "5", "6e", "7a", "8a"]
 
-MODEL = "cnn"   # "cnn" or "r3d18"
+MODEL = "r3d18"   # "cnn" or "r3d18"
 
 CHUNK_FRAMES    = 300
 BUFFER_FRAMES   = 300
 VAL_CHUNKS      = 4
 CHUNK_STRIDE    = 300
-TEMPORAL_STRIDE = 1    # r3d18: use 2 (→150 frames); cnn: 1
+TEMPORAL_STRIDE = 2    # r3d18: use 2 (→150 frames); cnn: 1
 
-BATCH_SIZE  = 8        # r3d18 is heavier; use 8 for cnn
+BATCH_SIZE  = 4        # r3d18 is heavier; use 8 for cnn
 EPOCHS      = 20
 LR          = 1e-4
 DEVICE      = "cuda" if torch.cuda.is_available() else "cpu"
@@ -220,7 +220,7 @@ def run_epoch(model, loader, criterion, optimizer=None, training=True, desc=""):
                 optimizer.zero_grad(set_to_none=True)
 
             with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=(DEVICE == "cuda")):
-                logits = model(flow)
+                logits = model(flow).view(-1)
                 loss   = criterion(logits, y)
 
             if training:
