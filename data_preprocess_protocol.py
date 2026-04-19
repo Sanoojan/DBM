@@ -1,16 +1,15 @@
 import csv
-import numpy as np
 import cv2
+import numpy as np
 import h5py
 from pathlib import Path
 from tqdm import tqdm
 
-DATA_ROOT      = Path("/mnt/scratch/rubabfiz/repos/DBM/dataset/Vehicle/No-Video/Resampled_previous_10/Participants")
-FLOW_HDF5_DIR  = Path("/mnt/scratch/rubabfiz/repos/DBM/dataset/Vehicle/flow_hdf5_112")
-VIDEO_HDF5_DIR = Path("/mnt/scratch/rubabfiz/repos/DBM/dataset/Vehicle/video_hdf5_112")
-ANOMALY_CSV    = Path("/mnt/scratch/rubabfiz/repos/DBM/dataset/Vehicle/No-Video/idd_annotation.csv")
-FLOW_HDF5_DIR.mkdir(parents=True, exist_ok=True)
-VIDEO_HDF5_DIR.mkdir(parents=True, exist_ok=True)
+DATA_ROOT   = Path("/mnt/scratch/rubabfiz/repos/DBM/dataset/Vehicle/No-Video/Resampled_previous_10/Participants")
+OUTPUT_DIR  = Path("/mnt/scratch/rubabfiz/repos/DBM/dataset/Vehicle/flow_hdf5_frame_chunks")
+ANOMALY_CSV = Path("/mnt/scratch/rubabfiz/repos/DBM/dataset/Vehicle/No-Video/idd_annotation.csv")
+
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 EXCLUDE        = {"P701", "P711", "7218", "7219", "7225", "7228", "7229", "7237"}
 TARGET_H       = 112
@@ -39,30 +38,24 @@ def load_anomalies(anomaly_csv):
     return anomaly_map
 
 
-def scenario_has_anomaly(pid, scenario_dir_name, anomaly_map):
+def scenario_has_anomaly(pid, scenario_name, anomaly_map):
     if pid not in anomaly_map:
         return False
-    return scenario_dir_name.split("-")[0] in anomaly_map[pid]
-
-
-def resize_crop(frame, target_h, target_w):
-    return cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_AREA)
+    return scenario_name.split("-")[0] in anomaly_map[pid]
 
 
 def process_participant(p_dir, anomaly_map):
-    pid       = p_dir.name
-    flow_out  = FLOW_HDF5_DIR  / f"{pid}_flow.h5"
-    video_out = VIDEO_HDF5_DIR / f"{pid}_video.h5"
+    pid     = p_dir.name
+    is_p    = pid.startswith("P")
+    out_h5  = OUTPUT_DIR / f"{pid}_flow.h5"
 
-    if flow_out.exists() and video_out.exists():
+    if out_h5.exists():
         print(f"  skip {pid} (already done)")
         return
 
-    flow_tmp  = FLOW_HDF5_DIR  / f"{pid}_flow.h5.tmp"
-    video_tmp = VIDEO_HDF5_DIR / f"{pid}_video.h5.tmp"
-    is_p      = pid.startswith("P")
+    tmp_h5 = OUTPUT_DIR / f"{pid}_flow.h5.tmp"
 
-    with h5py.File(flow_tmp, "w") as hf_flow, h5py.File(video_tmp, "w") as hf_video:
+    with h5py.File(tmp_h5, "w") as hf:
         for rnd in ["R1", "R2"]:
             label   = 1 if (is_p and rnd == "R2") else 0
             driving = p_dir / rnd / "driving"
@@ -101,7 +94,6 @@ def process_participant(p_dir, anomaly_map):
                         continue
 
                     target_set = set(frame_indices)
-                    bgr_map    = {}
                     gray_map   = {}
                     avi_idx    = 0
                     while True:
@@ -109,13 +101,12 @@ def process_participant(p_dir, anomaly_map):
                         if not ret:
                             break
                         if avi_idx in target_set:
-                            frame             = resize_crop(frame, TARGET_H, TARGET_W)
-                            bgr_map[avi_idx]  = frame
+                            frame = cv2.resize(frame, (TARGET_W, TARGET_H), interpolation=cv2.INTER_AREA)
                             gray_map[avi_idx] = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                         avi_idx += 1
                     cap.release()
 
-                    valid = [fi for fi in frame_indices if fi in bgr_map]
+                    valid = [fi for fi in frame_indices if fi in gray_map]
                     if len(valid) < 2:
                         continue
 
@@ -128,25 +119,17 @@ def process_participant(p_dir, anomaly_map):
                             iterations=3, poly_n=5, poly_sigma=1.2, flags=0,
                         ))
 
-                    flow_arr  = np.stack(flows).astype(np.float32)
-                    video_arr = np.stack([bgr_map[fi] for fi in valid])
-
-                    key = f"{rnd}+{scenario}+{task}"
-
-                    grp = hf_flow.create_group(key)
-                    grp.create_dataset("flow",  data=flow_arr,  compression="lzf",
-                                       chunks=(flow_arr.shape[0],  *flow_arr.shape[1:]))
+                    flow_arr = np.stack(flows).astype(np.float16)  # (N, H, W, 2)
+                    key      = f"{rnd}+{scenario}+{task}"
+                    grp      = hf.create_group(key)
+                    # chunk=(1,H,W,2): reading any single frame decompresses only that frame
+                    grp.create_dataset("flow",  data=flow_arr, compression="lzf",
+                                       chunks=(1, TARGET_H, TARGET_W, 2))
                     grp.create_dataset("label", data=np.int8(label))
 
-                    grp_v = hf_video.create_group(key)
-                    grp_v.create_dataset("video", data=video_arr, compression="lzf",
-                                         chunks=(video_arr.shape[0], *video_arr.shape[1:]))
-                    grp_v.create_dataset("label", data=np.int8(label))
+                    print(f"    {pid}/{key}: {flow_arr.shape[0]} frames")
 
-                    print(f"    {pid}/{key}: {flow_arr.shape[0]} flow, {video_arr.shape[0]} video frames")
-
-    flow_tmp.rename(flow_out)
-    video_tmp.rename(video_out)
+    tmp_h5.rename(out_h5)
     print(f"  ✓ {pid} done")
 
 
