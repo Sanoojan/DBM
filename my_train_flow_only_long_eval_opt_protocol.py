@@ -24,11 +24,11 @@ CHUNK_FRAMES    = 300
 BUFFER_FRAMES   = 300
 VAL_CHUNKS      = 4
 CHUNK_STRIDE    = 300
-TEMPORAL_STRIDE = 2    # r3d18: use 2 (→150 frames); cnn: 1
+TEMPORAL_STRIDE = 1    # r3d18: use 2 (→150 frames); cnn: 1
 
 BATCH_SIZE  = 4        # r3d18 is heavier; use 8 for cnn
-EPOCHS      = 20
-LR          = 1e-4
+EPOCHS      = 3
+LR          = 1e-4 
 DEVICE      = "cuda" if torch.cuda.is_available() else "cpu"
 SEED        = 42
 NUM_WORKERS = 4
@@ -246,16 +246,23 @@ def make_loader(samples, train):
 
 
 def main():
+    import argparse, json
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--fold", type=int, default=None,
+                        help="Run a single test fold (0-4). Omit to run all 5.")
+    args = parser.parse_args()
+    folds_to_run = list(range(5)) if args.fold is None else [args.fold]
+
     if WANDB_PROJECT:
         import wandb as wb
         wb.init(project=WANDB_PROJECT, config=dict(
             model=MODEL, chunk_frames=CHUNK_FRAMES, buffer_frames=BUFFER_FRAMES,
             temporal_stride=TEMPORAL_STRIDE, batch_size=BATCH_SIZE,
-            epochs=EPOCHS, lr=LR, seed=SEED,
+            epochs=EPOCHS, lr=LR, seed=SEED, fold=args.fold,
         ))
 
     log(f"\n{'='*60}")
-    log(f"DEVICE={DEVICE}  CHUNK={CHUNK_FRAMES}fr  BATCH={BATCH_SIZE}  EPOCHS={EPOCHS}")
+    log(f"DEVICE={DEVICE}  CHUNK={CHUNK_FRAMES}fr  BATCH={BATCH_SIZE}  EPOCHS={EPOCHS}  folds={folds_to_run}")
     log(f"{'='*60}")
 
     participant_fold = load_folds(FOLDS_CSV)
@@ -267,7 +274,7 @@ def main():
 
     fold_test_uars = []
 
-    for test_fold in range(5):
+    for test_fold in folds_to_run:
         val_fold = (test_fold + 1) % 5
         train_s  = [s for s in all_samples if s["fold"] != test_fold and s["fold"] != val_fold]
         val_s    = [s for s in all_samples if s["fold"] == val_fold]
@@ -340,15 +347,21 @@ def main():
                     f"test/fold{test_fold+1}_f1": test_m["f1"]})
         fold_test_uars.append(test_m["uar"])
 
-    log(f"\n{'='*60}")
-    log("FINAL 5-FOLD TEST RESULTS")
-    for i, uar in enumerate(fold_test_uars, 1):
-        log(f"  Fold {i}: UAR={uar:.4f}")
-    log(f"  Mean UAR: {np.mean(fold_test_uars):.4f}  Std: {np.std(fold_test_uars):.4f}")
+        result = {"fold": test_fold, "best_epoch": best_epoch, **test_m}
+        with open(fold_dir / "test_results.json", "w") as f:
+            json.dump(result, f, indent=2)
+
+    if len(folds_to_run) > 1:
+        log(f"\n{'='*60}")
+        log("FINAL 5-FOLD TEST RESULTS")
+        for fold_idx, uar in zip(folds_to_run, fold_test_uars):
+            log(f"  Fold {fold_idx+1}: UAR={uar:.4f}")
+        log(f"  Mean UAR: {np.mean(fold_test_uars):.4f}  Std: {np.std(fold_test_uars):.4f}")
+        if WANDB_PROJECT:
+            wb.log({"test/mean_uar": float(np.mean(fold_test_uars)),
+                    "test/std_uar":  float(np.std(fold_test_uars))})
 
     if WANDB_PROJECT:
-        wb.log({"test/mean_uar": float(np.mean(fold_test_uars)),
-                "test/std_uar":  float(np.std(fold_test_uars))})
         wb.finish()
 
 
