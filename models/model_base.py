@@ -32,3 +32,6 @@ class ModelBase(ABC):
     @abstractmethod
     def save(self, out_path):
         raise NotImplementedError()
+
+
+

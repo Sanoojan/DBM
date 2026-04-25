@@ -1,3 +1,4 @@
+import argparse
 import csv
 import random
 import numpy as np
@@ -9,31 +10,58 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from sklearn.metrics import roc_auc_score, f1_score
 from tqdm import tqdm
+from models.models_all import *
 
-FLOW_HDF5_DIR = Path("/mnt/scratch/rubabfiz/repos/DBM/dataset/Vehicle/flow_hdf5_frame_chunks")
-FOLDS_CSV     = Path("/mnt/gs21/scratch/rubabfiz/repos/DBM/hail-datasets/hail_datasets/datasets/ddd_2024/folds.csv")
+from sklearn.metrics import roc_curve
+
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument("--fold", type=int, default=None)
+
+parser.add_argument("--model", type=str, default="VideoModel",
+
+                    help="Model type: r3d18, CustomR3D18, VideoModel, etc.")
+
+parser.add_argument("--backbone", type=str, default="r3d18",
+
+                    help="Backbone for VideoModel: r3d18, r2plus1d_18, mc3_18, resnet18, vit_b_16")
+parser.add_argument("--batch_size", type=int, default=16, help="Batch size for training")
+
+args = parser.parse_args()
+
+
+
+print(f"Using model: {args.model}  backbone: {args.backbone}")
+print(f"Batch size: {args.batch_size}")
+
+
+FLOW_HDF5_DIR = Path("dataset/Vehicle/flow_hdf5_frame_chunks_raft_large")
+FOLDS_CSV     = Path("hail-datasets/hail_datasets/datasets/ddd_2024/folds.csv")
+TEST_ONLY = False  # set to True to skip training and only run test (requires existing checkpoints)
 
 WANDB_PROJECT = "DBM-OFlow"  # set to None to disable
 
 EXCLUDE_PARTICIPANTS = {"P701", "P711", "7218", "7219", "7225", "7228", "7229", "7237"}
 SCENARIO_NAMES       = ["1a", "2", "2b", "3c", "5", "6e", "7a", "8a"]
 
-MODEL = "r3d18"   # "cnn" or "r3d18"
-
+MODEL = args.model  # "cnn" or "r3d18"
+MODEL_NAME = args.backbone  # for logging; should be consistent with build_model()
+NAME = f"{MODEL}_{MODEL_NAME}_cropped"  # for saving logs and models; include key config in the name
 CHUNK_FRAMES    = 300
 BUFFER_FRAMES   = 300
 VAL_CHUNKS      = 4
 CHUNK_STRIDE    = 300
-TEMPORAL_STRIDE = 1    # r3d18: use 2 (→150 frames); cnn: 1
+TEMPORAL_STRIDE = 2    # r3d18: use 2 (→150 frames); cnn: 1
 
-BATCH_SIZE  = 4        # r3d18 is heavier; use 8 for cnn
-EPOCHS      = 3
-LR          = 1e-4 
+BATCH_SIZE  = args.batch_size       # r3d18 is heavier; use 8 for cnn
+EPOCHS      = 20
+LR          = 1e-5 
 DEVICE      = "cuda" if torch.cuda.is_available() else "cpu"
 SEED        = 42
 NUM_WORKERS = 4
 
-SAVE_ROOT = Path(f"./models_{MODEL}_c{CHUNK_FRAMES}_b{BUFFER_FRAMES}_ts{TEMPORAL_STRIDE}_ep{EPOCHS}_lr{LR}_bs{BATCH_SIZE}")
+SAVE_ROOT = Path(f"./Trained_checkpoints/models_{NAME}_{MODEL}_{MODEL_NAME}_c{CHUNK_FRAMES}_b{BUFFER_FRAMES}_ts{TEMPORAL_STRIDE}_ep{EPOCHS}_lr{LR}_bs{BATCH_SIZE}")
 SAVE_ROOT.mkdir(exist_ok=True)
 
 torch.manual_seed(SEED)
@@ -43,6 +71,162 @@ torch.backends.cudnn.benchmark = True
 
 LOG_FILE = SAVE_ROOT / "training_log.txt"
 
+
+def find_best_threshold(gts, probs):
+
+    fpr, tpr, thresholds = roc_curve(gts, probs)
+
+    uar_scores = (tpr + (1 - fpr)) / 2
+
+    best_idx = np.argmax(uar_scores)
+
+    return thresholds[best_idx]
+
+def topk_continuity_loss(frame_logits, k_ratio=0.1):
+
+    B, T = frame_logits.shape
+
+    k = max(1, int(T * k_ratio))
+
+    topk_vals, topk_idx = torch.topk(frame_logits, k=k, dim=1)
+
+    # sort indices
+
+    topk_idx_sorted, _ = torch.sort(topk_idx, dim=1)
+
+    # distance between consecutive top frames
+
+    diffs = topk_idx_sorted[:, 1:] - topk_idx_sorted[:, :-1]
+
+    # penalize large gaps
+
+    return diffs.float().mean()
+
+def topk_scores(frame_logits, k_ratio=0.1):
+
+    B, T = frame_logits.shape
+
+    k = max(1, int(T * k_ratio))
+
+    topk_vals, _ = torch.topk(frame_logits, k=k, dim=1)
+
+    return topk_vals.mean(dim=1)  # (B,)
+
+def ranking_loss(frame_logits, labels, margin=1.0, k_ratio=0.1):
+
+    # frame_logits: (B, T)
+
+    # labels: (B,)
+
+    scores = topk_scores(frame_logits, k_ratio)  # (B,)
+
+    pos_scores = scores[labels == 1]
+
+    neg_scores = scores[labels == 0]
+
+    if len(pos_scores) == 0 or len(neg_scores) == 0:
+
+        return torch.tensor(0.0, device=frame_logits.device)
+
+    # pairwise ranking
+
+    diff = pos_scores.unsqueeze(1) - neg_scores.unsqueeze(0)  # (Np, Nn)
+
+    loss = torch.clamp(margin - diff, min=0).mean()
+
+    return loss
+
+def ranking_loss_with_std(frame_logits, labels, margin=1.0, k_ratio=0.1, lambda_std=0.1):
+
+    # ---- top-k scores ----
+
+    scores = topk_scores(frame_logits, k_ratio)  # (B,)
+
+    pos_scores = scores[labels == 1]
+
+    neg_scores = scores[labels == 0]
+
+    if len(pos_scores) == 0 or len(neg_scores) == 0:
+
+        rank_loss = torch.tensor(0.0, device=frame_logits.device)
+
+    else:
+
+        diff = pos_scores.unsqueeze(1) - neg_scores.unsqueeze(0)
+
+        rank_loss = torch.clamp(margin - diff, min=0).mean()
+
+    # ---- std term ----
+
+    std = frame_logits.std(dim=1)  # (B,)
+
+    pos_std = std[labels == 1]
+
+    neg_std = std[labels == 0]
+
+    std_loss = 0.0
+
+    if len(pos_std) > 0:
+
+        std_loss += -pos_std.mean()   # maximize std for positives
+
+    if len(neg_std) > 0:
+
+        std_loss += neg_std.mean()    # minimize std for negatives
+
+    return rank_loss + lambda_std * std_loss
+
+def mil_topk(frame_logits, k_ratio=0.1):
+
+    # frame_logits: (B, T)
+
+    B, T = frame_logits.shape
+
+    k = max(1, int(T * k_ratio))
+
+    topk_vals, _ = torch.topk(frame_logits, k=k, dim=1)
+
+    video_logits = topk_vals.mean(dim=1)  # (B,)
+
+    return video_logits
+
+def build_model():
+    if MODEL == "r3d18":
+        return build_r3d18()
+    elif MODEL == "CustomR3D18":
+        return CustomR3D18()
+    
+    elif MODEL == "FrameTemporalModel":
+        return FrameTemporalModel()
+    
+    elif MODEL == "MILFrameModel": 
+        return MILFrameModel()
+    
+    elif MODEL == "MILFrameTransformer":
+        return MILFrameTransformer()
+    elif MODEL == "VideoModel":
+        return VideoModel(backbone_name=MODEL_NAME,crop=True)
+
+    else:
+        return SmallCNN()
+
+def attention_entropy(attn):
+
+    # attn: (B, T)
+
+    return -(attn * torch.log(attn + 1e-8)).sum(dim=1).mean()
+
+def topk_mean(logits, k_ratio=0.1):
+
+    # logits: (B, T)
+
+    B, T = logits.shape
+
+    k = max(1, int(T * k_ratio))
+
+    topk_vals, _ = torch.topk(logits, k=k, dim=1)
+
+    return topk_vals.mean(dim=1)  # (B,)
 
 def log(msg):
     print(msg)
@@ -143,48 +327,11 @@ class FlowDataset(Dataset):
         flow = hf[key]["flow"][start : start + CHUNK_FRAMES : TEMPORAL_STRIDE]
         flow = flow.astype(np.float32)
         flow = np.transpose(flow, (3, 0, 1, 2))   # (2, T, H, W)
-        if MODEL == "r3d18":
-            flow = np.clip(flow, -20, 20) / 20.0
+        
+        flow = np.clip(flow, -20, 20) / 20.0
         return torch.from_numpy(flow), torch.tensor(label, dtype=torch.float32)
 
 
-class SmallCNN(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.features = nn.Sequential(
-            nn.Conv3d(2, 16, 3, padding=1), nn.BatchNorm3d(16), nn.ReLU(inplace=True), nn.MaxPool3d(2),
-            nn.Conv3d(16, 32, 3, padding=1), nn.BatchNorm3d(32), nn.ReLU(inplace=True), nn.MaxPool3d(2),
-            nn.Conv3d(32, 64, 3, padding=1), nn.BatchNorm3d(64), nn.ReLU(inplace=True), nn.AdaptiveAvgPool3d(1),
-        )
-        self.classifier = nn.Sequential(
-            nn.Linear(64, 128), nn.ReLU(inplace=True), nn.Dropout(0.5), nn.Linear(128, 1)
-        )
-
-    def forward(self, x):
-        return self.classifier(self.features(x).view(x.size(0), -1)).view(-1)
-
-
-def build_r3d18():
-    from torchvision.models.video import r3d_18, R3D_18_Weights
-    backbone = r3d_18(weights=R3D_18_Weights.KINETICS400_V1)
-    old_conv = backbone.stem[0]
-    new_conv = nn.Conv3d(2, old_conv.out_channels,
-                         kernel_size=old_conv.kernel_size, stride=old_conv.stride,
-                         padding=old_conv.padding, bias=old_conv.bias is not None)
-    with torch.no_grad():
-        mean_w = old_conv.weight.mean(dim=1, keepdim=True)
-        new_conv.weight.copy_(mean_w.expand_as(new_conv.weight))
-        if old_conv.bias is not None:
-            new_conv.bias.copy_(old_conv.bias)
-    backbone.stem[0] = new_conv
-    backbone.fc = nn.Sequential(nn.Dropout(0.5), nn.Linear(backbone.fc.in_features, 1))
-    return backbone
-
-
-def build_model():
-    if MODEL == "r3d18":
-        return build_r3d18()
-    return SmallCNN()
 
 
 def compute_metrics(gts, probs, threshold=0.5):
@@ -206,35 +353,80 @@ def compute_metrics(gts, probs, threshold=0.5):
     return {"uar": uar, "sensitivity": sensitivity, "specificity": specificity, "auc": auc, "f1": f1}
 
 
-def run_epoch(model, loader, criterion, optimizer=None, training=True, desc=""):
+def run_epoch(model, loader, criterion, criterion_frame, optimizer=None, training=True, desc=""):
+
     model.train() if training else model.eval()
+
     total_loss, probs_all, gts_all = 0.0, [], []
+
     ctx = torch.enable_grad() if training else torch.no_grad()
 
     with ctx:
+
         pbar = tqdm(loader, desc=desc, leave=False)
+
         for flow, y in pbar:
+
             flow = flow.to(DEVICE, non_blocking=True)
+
             y    = y.to(DEVICE, non_blocking=True)
+
+            
+
             if training:
+
                 optimizer.zero_grad(set_to_none=True)
 
             with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=(DEVICE == "cuda")):
-                logits = model(flow).view(-1)
-                loss   = criterion(logits, y)
+
+                frame_logits=model(flow)
+                if MODEL_NAME == "resnet18" or MODEL_NAME == "resnet50":
+                   
+                    logits = mil_topk(frame_logits, k_ratio=0.1)
+
+                    loss_cls = criterion(logits, y)
+                    loss_rank = ranking_loss_with_std(frame_logits, y)
+
+                    loss = 0.0 * loss_cls + 0.1 * loss_rank
+                else:
+                    logits=frame_logits    
+                
+                loss_video = criterion(logits, y)
+                
+                # ✅ FIX: use logits directly (no sigmoid)
+
+                # loss_frame = criterion_frame(
+                #     frame_logits,
+                #     y.unsqueeze(1).expand_as(frame_logits)
+
+                # )
+                # loss_cont = topk_continuity_loss(frame_logits)
+                # loss_attn = attention_entropy(attn)
+
+                # 🔥 slightly reduced frame loss weight (important)
+
+                loss = loss_video 
+                # + 0.1 * loss_frame + 0.01 * loss_attn
+                # loss += 0.01 * loss_cont
 
             if training:
+
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
                 optimizer.step()
-
+                
             total_loss += loss.item()
             probs_all.extend(torch.sigmoid(logits).detach().float().cpu().numpy().tolist())
             gts_all.extend(y.cpu().numpy().tolist())
             pbar.set_postfix(loss=f"{loss.item():.4f}")
 
     n = max(len(loader), 1)
-    return total_loss / n, compute_metrics(gts_all, probs_all)
+
+    # default metrics (threshold=0.5 just for logging)
+
+    metrics = compute_metrics(gts_all, probs_all)
+
+    return total_loss / n, metrics, gts_all, probs_all
 
 
 def make_loader(samples, train):
@@ -247,15 +439,15 @@ def make_loader(samples, train):
 
 def main():
     import argparse, json
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--fold", type=int, default=None,
-                        help="Run a single test fold (0-4). Omit to run all 5.")
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument("--fold", type=int, default=None,
+    #                     help="Run a single test fold (0-4). Omit to run all 5.")
+    # args = parser.parse_args()
     folds_to_run = list(range(5)) if args.fold is None else [args.fold]
 
     if WANDB_PROJECT:
         import wandb as wb
-        wb.init(project=WANDB_PROJECT, config=dict(
+        wb.init(project=WANDB_PROJECT, name=NAME, config=dict(
             model=MODEL, chunk_frames=CHUNK_FRAMES, buffer_frames=BUFFER_FRAMES,
             temporal_stride=TEMPORAL_STRIDE, batch_size=BATCH_SIZE,
             epochs=EPOCHS, lr=LR, seed=SEED, fold=args.fold,
@@ -280,6 +472,8 @@ def main():
         val_s    = [s for s in all_samples if s["fold"] == val_fold]
         test_s   = [s for s in all_samples if s["fold"] == test_fold]
 
+        
+
         intox_s = [s for s in train_s if s["label"] == 1]
         sober_s = [s for s in train_s if s["label"] == 0]
         sober_s = random.sample(sober_s, min(len(intox_s), len(sober_s)))
@@ -296,49 +490,96 @@ def main():
         test_loader  = make_loader(test_s,  train=False)
 
         model     = build_model().to(DEVICE)
+
         criterion = nn.BCEWithLogitsLoss()
+        criterion_frame = nn.BCEWithLogitsLoss()
         optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=1e-4)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
 
         fold_dir     = SAVE_ROOT / f"fold_{test_fold+1}"
         fold_dir.mkdir(exist_ok=True)
         best_val_uar = -1.0
+
         best_epoch   = 0
 
-        for epoch in range(EPOCHS):
-            tr_loss, tr_m = run_epoch(model, train_loader, criterion, optimizer, training=True,
-                                      desc=f"F{test_fold+1} Ep{epoch+1} train")
-            vl_loss, vl_m = run_epoch(model, val_loader,   criterion, training=False,
-                                      desc=f"F{test_fold+1} Ep{epoch+1} val")
-            scheduler.step()
+        best_thresh  = 0.5  # store best threshold
+        if not TEST_ONLY:
+            for epoch in range(EPOCHS):
 
-            log(f"  Ep{epoch+1:02d} | train loss={tr_loss:.4f} uar={tr_m['uar']:.4f} auc={tr_m['auc']:.4f} | "
-                f"val loss={vl_loss:.4f} uar={vl_m['uar']:.4f} "
-                f"sens={vl_m['sensitivity']:.4f} spec={vl_m['specificity']:.4f} auc={vl_m['auc']:.4f}")
+                tr_loss, tr_m, _, _ = run_epoch(
+                    model, train_loader, criterion, criterion_frame, optimizer,
+                    training=True, desc=f"F{test_fold+1} Ep{epoch+1} train"
+                )
 
-            if WANDB_PROJECT:
-                wb.log({"fold": test_fold + 1, "epoch": epoch + 1,
-                        "train/loss": tr_loss, "train/uar": tr_m["uar"], "train/auc": tr_m["auc"],
-                        "val/loss": vl_loss, "val/uar": vl_m["uar"],
-                        "val/sensitivity": vl_m["sensitivity"], "val/specificity": vl_m["specificity"],
-                        "val/auc": vl_m["auc"], "val/f1": vl_m["f1"]})
+                vl_loss, vl_m, val_gts, val_probs = run_epoch(
+                    model, val_loader, criterion, criterion_frame,
+                    training=False, desc=f"F{test_fold+1} Ep{epoch+1} val"
+                )
 
-            torch.save(model.state_dict(), fold_dir / f"epoch_{epoch+1:02d}.pth")
-            uar_val = vl_m["uar"] if not np.isnan(vl_m["uar"]) else -1.0
-            if uar_val > best_val_uar:
-                best_val_uar = uar_val
-                best_epoch   = epoch + 1
-                torch.save(model.state_dict(), fold_dir / "best_model.pth")
-                log(f"    *** new best val UAR={best_val_uar:.4f} (epoch {best_epoch}) ***")
+                scheduler.step()
+
+                # ✅ compute best threshold on validation
+
+                val_thresh = find_best_threshold(val_gts, val_probs)
+
+                # ✅ recompute metrics using best threshold
+
+                vl_m_thresh = compute_metrics(val_gts, val_probs, threshold=val_thresh)
+
+                log(f"  Ep{epoch+1:02d} | train loss={tr_loss:.4f} uar={tr_m['uar']:.4f} auc={tr_m['auc']:.4f} | "
+                    f"val loss={vl_loss:.4f} uar={vl_m_thresh['uar']:.4f} "
+                    f"sens={vl_m_thresh['sensitivity']:.4f} spec={vl_m_thresh['specificity']:.4f} "
+                    f"auc={vl_m_thresh['auc']:.4f} thr={val_thresh:.3f}")
+
+                if WANDB_PROJECT:
+
+                    wb.log({
+
+                        f"fold": test_fold + 1,
+                        f"epoch": epoch + 1,
+                        f"train/{test_fold+1}_loss": tr_loss,
+                        f"train/{test_fold+1}_uar": tr_m["uar"],
+                        f"train/{test_fold+1}_auc": tr_m["auc"],
+                        f"val/{test_fold+1}_loss": vl_loss,
+                        f"val/{test_fold+1}_uar": vl_m_thresh["uar"],
+                        f"val/{test_fold+1}_sensitivity": vl_m_thresh["sensitivity"],
+                        f"val/{test_fold+1}_specificity": vl_m_thresh["specificity"],
+                        f"val/{test_fold+1}_auc": vl_m_thresh["auc"],
+                        f"val/{test_fold+1}_f1": vl_m_thresh["f1"],
+                        f"val/{test_fold+1}_threshold": val_thresh
+
+                    })
+
+                torch.save(model.state_dict(), fold_dir / f"epoch_{epoch+1:02d}.pth")
+
+                uar_val = vl_m_thresh["uar"] if not np.isnan(vl_m_thresh["uar"]) else -1.0
+
+                if uar_val > best_val_uar:
+                    best_val_uar = uar_val
+                    best_epoch   = epoch + 1
+                    best_thresh  = val_thresh   # ✅ save threshold
+                    torch.save(model.state_dict(), fold_dir / "best_model.pth")
+
+                    log(f"    *** new best val UAR={best_val_uar:.4f} (epoch {best_epoch}) thr={best_thresh:.3f} ***")
 
         model.load_state_dict(torch.load(fold_dir / "best_model.pth"))
-        _, test_m = run_epoch(model, test_loader, criterion, training=False,
-                              desc=f"F{test_fold+1} test")
+
+        _, _, test_gts, test_probs = run_epoch(
+
+            model, test_loader, criterion, criterion_frame,
+            training=False, desc=f"F{test_fold+1} test"
+        )
+
+        # ✅ apply validation threshold
+
+        best_thresh= best_thresh if not np.isnan(best_thresh) else 0.5
+        test_m = compute_metrics(test_gts, test_probs, threshold=best_thresh)
 
         log(f"\n  FOLD {test_fold+1} TEST (best epoch={best_epoch}):")
         log(f"    UAR={test_m['uar']:.4f}  sens={test_m['sensitivity']:.4f}  "
-            f"spec={test_m['specificity']:.4f}  AUC={test_m['auc']:.4f}  F1={test_m['f1']:.4f}")
-
+            f"spec={test_m['specificity']:.4f}  AUC={test_m['auc']:.4f}  "
+            f"F1={test_m['f1']:.4f}  thr={best_thresh:.3f}")
+        
         if WANDB_PROJECT:
             wb.log({f"test/fold{test_fold+1}_uar": test_m["uar"],
                     f"test/fold{test_fold+1}_auc": test_m["auc"],

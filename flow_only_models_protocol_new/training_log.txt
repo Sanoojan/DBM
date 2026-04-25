@@ -1,0 +1,87 @@
+
+Using protocol from: folds.csv
+
+Using protocol from: hail-datasets/hail_datasets/datasets/ddd_2024/folds.csv
+
+Scanning participants...
+Total valid participants: 51
+
+============================================================
+FOLD 1
+Train participants: 40
+Test  participants: 11
+Train samples: 440
+Test  samples: 120
+
+Using protocol from: hail-datasets/hail_datasets/datasets/ddd_2024/folds.csv
+
+Scanning participants...
+Total valid participants: 51
+
+============================================================
+FOLD 1
+Train participants: 40
+Test  participants: 11
+Train samples: 440
+Test  samples: 120
+
+Using protocol from: hail-datasets/hail_datasets/datasets/ddd_2024/folds.csv
+
+Scanning participants...
+Total valid participants: 51
+
+============================================================
+FOLD 1
+Train participants: 40
+Test  participants: 11
+Train samples: 440
+Test  samples: 120
+
+Using protocol from: hail-datasets/hail_datasets/datasets/ddd_2024/folds.csv
+
+Scanning participants...
+Total valid participants: 51
+
+============================================================
+FOLD 1
+Train participants: 40
+Test  participants: 11
+Train samples: 440
+Test  samples: 120
+Ep01 | train AUC=0.4657 | test AUC=0.6016
+Ep02 | train AUC=0.4496 | test AUC=0.6028
+Ep03 | train AUC=0.6015 | test AUC=0.6226
+Ep04 | train AUC=0.5550 | test AUC=0.6262
+Ep05 | train AUC=0.6042 | test AUC=0.6520
+Ep06 | train AUC=0.5629 | test AUC=0.6881
+Ep07 | train AUC=0.5812 | test AUC=0.6448
+Ep08 | train AUC=0.6667 | test AUC=0.6851
+Ep09 | train AUC=0.5684 | test AUC=0.6544
+Ep10 | train AUC=0.5959 | test AUC=0.6791
+Ep11 | train AUC=0.5138 | test AUC=0.6983
+Ep12 | train AUC=0.6523 | test AUC=0.6791
+Ep13 | train AUC=0.5937 | test AUC=0.6845
+Ep14 | train AUC=0.6082 | test AUC=0.7055
+Ep15 | train AUC=0.6623 | test AUC=0.7061
+Ep16 | train AUC=0.6382 | test AUC=0.7061
+Ep17 | train AUC=0.5282 | test AUC=0.6989
+Ep18 | train AUC=0.6040 | test AUC=0.7013
+Ep19 | train AUC=0.5765 | test AUC=0.7097
+Ep20 | train AUC=0.5766 | test AUC=0.6358
+Best Test AUC (Fold 1) = 0.7097
+
+============================================================
+FOLD 2
+Train participants: 42
+Test  participants: 9
+Train samples: 461
+Test  samples: 99
+Ep01 | train AUC=0.4865 | test AUC=0.4799
+Ep02 | train AUC=0.5012 | test AUC=0.4885
+Ep03 | train AUC=0.5614 | test AUC=0.5067
+Ep04 | train AUC=0.4728 | test AUC=0.6466
+Ep05 | train AUC=0.5312 | test AUC=0.6638
+Ep06 | train AUC=0.5968 | test AUC=0.5900
+Ep07 | train AUC=0.5703 | test AUC=0.5623
+Ep08 | train AUC=0.5930 | test AUC=0.5814
+Ep09 | train AUC=0.5299 | test AUC=0.6686

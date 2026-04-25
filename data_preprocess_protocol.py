@@ -4,10 +4,13 @@ import numpy as np
 import h5py
 from pathlib import Path
 from tqdm import tqdm
+from torchvision.models.optical_flow import raft_large
+from torchvision.models.optical_flow import Raft_Large_Weights
+import torch
 
-DATA_ROOT   = Path("/mnt/scratch/rubabfiz/repos/DBM/dataset/Vehicle/No-Video/Resampled_previous_10/Participants")
-OUTPUT_DIR  = Path("/mnt/scratch/rubabfiz/repos/DBM/dataset/Vehicle/flow_hdf5_frame_chunks")
-ANOMALY_CSV = Path("/mnt/scratch/rubabfiz/repos/DBM/dataset/Vehicle/No-Video/idd_annotation.csv")
+DATA_ROOT   = Path("dataset/Vehicle/Full/Resampled_previous_10/Participants")
+OUTPUT_DIR  = Path("dataset/Vehicle/flow_hdf5_frame_chunks")
+ANOMALY_CSV = Path("dataset/Vehicle/Full/idd_annotation.csv")
 
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -16,6 +19,13 @@ TARGET_H       = 112
 TARGET_W       = 224
 SCENARIO_NAMES = ["1a", "2", "2b", "3c", "5", "6e", "7a", "8a"]
 
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+print("Using device:", DEVICE)
+
+weights = Raft_Large_Weights.DEFAULT
+raft = raft_large(weights=weights).to(DEVICE)
+raft = raft.eval()
+transform = weights.transforms()
 
 def load_anomalies(anomaly_csv):
     anomaly_map = {}
@@ -118,6 +128,31 @@ def process_participant(p_dir, anomaly_map):
                             pyr_scale=0.5, levels=3, winsize=15,
                             iterations=3, poly_n=5, poly_sigma=1.2, flags=0,
                         ))
+                    # flows = []
+
+                    # with torch.no_grad():
+                    #     for i in range(1, len(grays)):
+
+                    #         img1 = grays[i-1]
+                    #         img2 = grays[i]
+
+                    #         # Convert to 3-channel RGB (RAFT expects 3-channel)
+                    #         img1 = cv2.cvtColor(img1, cv2.COLOR_GRAY2RGB)
+                    #         img2 = cv2.cvtColor(img2, cv2.COLOR_GRAY2RGB)
+
+                    #         # To tensor (C,H,W) and normalize
+                    #         img1 = torch.from_numpy(img1).permute(2,0,1).float() / 255.0
+                    #         img2 = torch.from_numpy(img2).permute(2,0,1).float() / 255.0
+
+                    #         img1 = img1.unsqueeze(0).to(DEVICE)
+                    #         img2 = img2.unsqueeze(0).to(DEVICE)
+
+                    #         img1, img2 = transform(img1, img2)
+
+                    #         flow_pred = raft(img1, img2)[-1]  # final flow
+
+                    #         flow_np = flow_pred.squeeze(0).permute(1,2,0).cpu().numpy()
+                    #         flows.append(flow_np)
 
                     flow_arr = np.stack(flows).astype(np.float16)  # (N, H, W, 2)
                     key      = f"{rnd}+{scenario}+{task}"

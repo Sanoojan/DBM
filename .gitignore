@@ -175,3 +175,5 @@ flow_only_models_opt/*
 flow_only_models/*
 flow_models2/*
 dataset/*
+models_cnn_pos_weight5_cnn_c300_b300_ts1_ep10_lr0.0001_bs8/fold_3/test_results.json
+Trained_checkpoints/*
